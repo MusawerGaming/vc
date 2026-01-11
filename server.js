@@ -16,19 +16,37 @@ const PORT = process.env.PORT || 3000;
 app.use(express.static(path.join(__dirname, 'public')));
 
 io.on('connection', (socket) => {
-  socket.on('join-room', (roomId) => {
-    socket.join(roomId);
-    socket.to(roomId).emit('user-joined', socket.id);
+  console.log("User connected:", socket.id);
 
-    socket.on('signal', (data) => {
-      io.to(data.target).emit('signal', {
-        from: socket.id,
-        signal: data.signal
-      });
+  // FIXED JOIN HANDLER
+  socket.on('join-room', ({ room, username }) => {
+    socket.join(room);
+    socket.data.username = username;
+
+    console.log(`${username} joined ${room}`);
+
+    // Tell others someone joined
+    socket.to(room).emit('user-joined', {
+      id: socket.id,
+      username
     });
+  });
 
-    socket.on('disconnect', () => {
-      socket.to(roomId).emit('user-left', socket.id);
+  // WebRTC signaling
+  socket.on('signal', (data) => {
+    io.to(data.target).emit('signal', {
+      from: socket.id,
+      signal: data.signal
+    });
+  });
+
+  // Handle disconnect
+  socket.on('disconnect', () => {
+    console.log("User disconnected:", socket.id);
+
+    // Notify all rooms this user was in
+    socket.rooms.forEach((room) => {
+      socket.to(room).emit('user-left', socket.id);
     });
   });
 });
