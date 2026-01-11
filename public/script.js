@@ -4,7 +4,7 @@ let localStream;
 let peers = {};
 let roomId = null;
 let audioMuted = false;
-let videoOff = false;
+let videoOff = true; // camera off by default
 
 const joinDiv = document.getElementById('join');
 const roomDiv = document.getElementById('room');
@@ -39,11 +39,19 @@ async function startMedia() {
     audio: true
   });
 
+  // Camera OFF by default
+  localStream.getVideoTracks().forEach(t => t.enabled = false);
+  cameraBtn.textContent = "Camera on";
+
   const localVideo = document.createElement('video');
   localVideo.srcObject = localStream;
   localVideo.autoplay = true;
   localVideo.muted = true;
+  localVideo.id = "local-video";
   videosDiv.appendChild(localVideo);
+
+  // Speaking detection for local user
+  setupSpeakingDetection(localVideo, localStream);
 }
 
 function joinRoom(room) {
@@ -106,6 +114,7 @@ function createPeer(userId, isInitiator) {
 
   peer.ontrack = (event) => {
     const [stream] = event.streams;
+
     let video = document.getElementById(`video-${userId}`);
     if (!video) {
       video = document.createElement('video');
@@ -113,7 +122,11 @@ function createPeer(userId, isInitiator) {
       video.autoplay = true;
       videosDiv.appendChild(video);
     }
+
     video.srcObject = stream;
+
+    // Speaking detection for remote user
+    setupSpeakingDetection(video, stream);
   };
 
   peer.onicecandidate = (event) => {
@@ -137,4 +150,29 @@ function createPeer(userId, isInitiator) {
   }
 
   return peer;
+}
+
+// 🔊 SPEAKING DETECTION
+function setupSpeakingDetection(videoElement, stream) {
+  const audioContext = new AudioContext();
+  const analyser = audioContext.createAnalyser();
+  const source = audioContext.createMediaStreamSource(stream);
+  source.connect(analyser);
+
+  const data = new Uint8Array(analyser.frequencyBinCount);
+
+  function detect() {
+    analyser.getByteFrequencyData(data);
+    let volume = data.reduce((a, b) => a + b) / data.length;
+
+    if (volume > 30) {
+      videoElement.classList.add("speaking");
+    } else {
+      videoElement.classList.remove("speaking");
+    }
+
+    requestAnimationFrame(detect);
+  }
+
+  detect();
 }
