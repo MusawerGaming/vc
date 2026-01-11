@@ -8,19 +8,22 @@
 <body>
   <div id="join">
     <h1>VC</h1>
-    <input id="roomInput" placeholder="room name (e.g. smp1)" />
-    <button id="joinBtn">Join room</button>
-    <br><br>
-    <!-- NEW BUTTON -->
-    <button id="createBtn">Create Room</button>
+
+    <!-- USERNAME INPUT -->
+    <input id="nameInput" placeholder="your name" />
+
+    <!-- JOIN BUTTON -->
+    <button id="joinBtn">Join</button>
   </div>
 
   <div id="room" class="hidden">
-    <h2 id="roomName"></h2>
+    <h2 id="roomName">Room: main</h2>
+
     <div class="controls">
       <button id="muteBtn">Mute</button>
-      <button id="cameraBtn">Camera off</button>
+      <button id="cameraBtn">Camera on</button>
     </div>
+
     <div id="videos"></div>
   </div>
 
