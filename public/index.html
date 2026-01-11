@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>VC</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="join">
+    <h1>VC</h1>
+    <input id="roomInput" placeholder="room name (e.g. smp1)" />
+    <button id="joinBtn">Join room</button>
+  </div>
+
+  <div id="room" class="hidden">
+    <h2 id="roomName"></h2>
+    <div class="controls">
+      <button id="muteBtn">Mute</button>
+      <button id="cameraBtn">Camera off</button>
+    </div>
+    <div id="videos"></div>
+  </div>
+
+  <script src="https://cdn.socket.io/4.7.0/socket.io.min.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
