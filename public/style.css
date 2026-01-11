@@ -1,0 +1,40 @@
+body {
+  margin: 0;
+  font-family: sans-serif;
+  background: #0b0b10;
+  color: #f5f5f5;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+}
+
+#join, #room {
+  text-align: center;
+}
+
+.hidden {
+  display: none;
+}
+
+#roomName {
+  margin-bottom: 10px;
+}
+
+#videos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+}
+
+video {
+  width: 280px;
+  max-width: 100%;
+  background: #000;
+  border-radius: 6px;
+}
+
+.controls button {
+  margin: 5px;
+}
