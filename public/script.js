@@ -2,23 +2,26 @@ const socket = io();
 
 let localStream;
 let peers = {};
-let roomId = null;
 let audioMuted = false;
 let videoOff = true; // camera off by default
+let username = "";
+const FIXED_ROOM = "main";
 
 const joinDiv = document.getElementById('join');
 const roomDiv = document.getElementById('room');
 const roomNameEl = document.getElementById('roomName');
-const roomInput = document.getElementById('roomInput');
+const nameInput = document.getElementById('nameInput');
 const joinBtn = document.getElementById('joinBtn');
 const videosDiv = document.getElementById('videos');
 const muteBtn = document.getElementById('muteBtn');
 const cameraBtn = document.getElementById('cameraBtn');
 
 joinBtn.onclick = async () => {
-  roomId = roomInput.value.trim() || 'default';
+  username = nameInput.value.trim();
+  if (!username) return alert("Enter a name first");
+
   await startMedia();
-  joinRoom(roomId);
+  joinRoom(FIXED_ROOM);
 };
 
 muteBtn.onclick = () => {
@@ -50,6 +53,13 @@ async function startMedia() {
   localVideo.id = "local-video";
   videosDiv.appendChild(localVideo);
 
+  // Username label for local user
+  const label = document.createElement('div');
+  label.className = "name-label";
+  label.textContent = username;
+  label.id = "label-local";
+  videosDiv.appendChild(label);
+
   // Speaking detection for local user
   setupSpeakingDetection(localVideo, localStream);
 }
@@ -58,20 +68,25 @@ function joinRoom(room) {
   joinDiv.classList.add('hidden');
   roomDiv.classList.remove('hidden');
   roomNameEl.textContent = `Room: ${room}`;
-  socket.emit('join-room', room);
+
+  socket.emit('join-room', { room, username });
 }
 
-socket.on('user-joined', async (userId) => {
-  const peer = createPeer(userId, true);
-  peers[userId] = peer;
+socket.on('user-joined', async ({ id, username }) => {
+  const peer = createPeer(id, true);
+  peers[id] = { peer, username };
 });
 
 socket.on('signal', async ({ from, signal }) => {
-  let peer = peers[from];
-  if (!peer) {
-    peer = createPeer(from, false);
-    peers[from] = peer;
+  let entry = peers[from];
+  if (!entry) {
+    const peer = createPeer(from, false);
+    peers[from] = { peer, username: "User" };
+    entry = peers[from];
   }
+
+  const peer = entry.peer;
+
   if (signal.sdp) {
     await peer.setRemoteDescription(new RTCSessionDescription(signal.sdp));
     if (signal.sdp.type === 'offer') {
@@ -83,6 +98,7 @@ socket.on('signal', async ({ from, signal }) => {
       });
     }
   }
+
   if (signal.candidate) {
     try {
       await peer.addIceCandidate(new RTCIceCandidate(signal.candidate));
@@ -94,18 +110,19 @@ socket.on('signal', async ({ from, signal }) => {
 
 socket.on('user-left', (userId) => {
   if (peers[userId]) {
-    peers[userId].close();
+    peers[userId].peer.close();
     delete peers[userId];
   }
+
   const vid = document.getElementById(`video-${userId}`);
+  const label = document.getElementById(`label-${userId}`);
   if (vid) vid.remove();
+  if (label) label.remove();
 });
 
 function createPeer(userId, isInitiator) {
   const peer = new RTCPeerConnection({
-    iceServers: [
-      { urls: 'stun:stun.l.google.com:19302' }
-    ]
+    iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
   });
 
   localStream.getTracks().forEach(track => {
@@ -125,7 +142,17 @@ function createPeer(userId, isInitiator) {
 
     video.srcObject = stream;
 
-    // Speaking detection for remote user
+    // Username label
+    let label = document.getElementById(`label-${userId}`);
+    if (!label) {
+      label = document.createElement('div');
+      label.id = `label-${userId}`;
+      label.className = "name-label";
+      label.textContent = peers[userId]?.username || "User";
+      videosDiv.appendChild(label);
+    }
+
+    // Speaking detection
     setupSpeakingDetection(video, stream);
   };
 
