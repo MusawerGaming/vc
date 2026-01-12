@@ -30,10 +30,35 @@ muteBtn.onclick = () => {
   muteBtn.textContent = audioMuted ? 'Unmute' : 'Mute';
 };
 
-cameraBtn.onclick = () => {
+// REAL camera toggle (stop hardware + restart)
+cameraBtn.onclick = async () => {
   videoOff = !videoOff;
-  localStream.getVideoTracks().forEach(t => t.enabled = !videoOff);
-  cameraBtn.textContent = videoOff ? 'Camera on' : 'Camera off';
+
+  if (videoOff) {
+    // FULL STOP camera hardware
+    localStream.getVideoTracks().forEach(t => t.stop());
+    cameraBtn.textContent = "Camera on";
+  } else {
+    // RESTART camera hardware
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+    const newTrack = stream.getVideoTracks()[0];
+
+    // Replace track in all peer connections
+    Object.values(peers).forEach(({ peer }) => {
+      const sender = peer.getSenders().find(s => s.track && s.track.kind === "video");
+      if (sender) sender.replaceTrack(newTrack);
+    });
+
+    // Update local stream
+    const oldTrack = localStream.getVideoTracks()[0];
+    if (oldTrack) localStream.removeTrack(oldTrack);
+    localStream.addTrack(newTrack);
+
+    // Update local video element
+    document.getElementById("local-video").srcObject = localStream;
+
+    cameraBtn.textContent = "Camera off";
+  }
 };
 
 async function startMedia() {
@@ -43,7 +68,7 @@ async function startMedia() {
   });
 
   // Camera OFF by default
-  localStream.getVideoTracks().forEach(t => t.enabled = false);
+  localStream.getVideoTracks().forEach(t => t.stop());
   cameraBtn.textContent = "Camera on";
 
   const localVideo = document.createElement('video');
@@ -53,14 +78,14 @@ async function startMedia() {
   localVideo.id = "local-video";
   videosDiv.appendChild(localVideo);
 
-  // Username label for local user
+  // Username label
   const label = document.createElement('div');
   label.className = "name-label";
   label.textContent = username;
   label.id = "label-local";
   videosDiv.appendChild(label);
 
-  // Speaking detection for local user
+  // Speaking detection
   setupSpeakingDetection(localVideo, localStream);
 }
 
@@ -125,6 +150,7 @@ function createPeer(userId, isInitiator) {
     iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
   });
 
+  // Add tracks (audio always, video only if camera is on)
   localStream.getTracks().forEach(track => {
     peer.addTrack(track, localStream);
   });
