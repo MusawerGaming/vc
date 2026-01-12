@@ -26,20 +26,8 @@ joinBtn.onclick = async () => {
 
 muteBtn.onclick = () => {
   audioMuted = !audioMuted;
-
-  // Toggle local audio track
   localStream.getAudioTracks().forEach(t => t.enabled = !audioMuted);
   muteBtn.textContent = audioMuted ? 'Unmute' : 'Mute';
-
-  // Local mute indicator
-  const localVideo = document.getElementById("local-video");
-  if (localVideo) {
-    if (audioMuted) localVideo.classList.add("muted");
-    else localVideo.classList.remove("muted");
-  }
-
-  // Tell others
-  socket.emit("mute-changed", { muted: audioMuted });
 };
 
 // REAL camera toggle (stop hardware + restart)
@@ -67,8 +55,7 @@ cameraBtn.onclick = async () => {
     localStream.addTrack(newTrack);
 
     // Update local video element
-    const localVideo = document.getElementById("local-video");
-    if (localVideo) localVideo.srcObject = localStream;
+    document.getElementById("local-video").srcObject = localStream;
 
     cameraBtn.textContent = "Camera off";
   }
@@ -84,31 +71,21 @@ async function startMedia() {
   localStream.getVideoTracks().forEach(t => t.stop());
   cameraBtn.textContent = "Camera on";
 
-  const container = document.createElement("div");
-  container.className = "video-container";
-  container.id = "container-local";
-
   const localVideo = document.createElement('video');
   localVideo.srcObject = localStream;
   localVideo.autoplay = true;
   localVideo.muted = true;
   localVideo.id = "local-video";
-  container.appendChild(localVideo);
+  videosDiv.appendChild(localVideo);
 
+  // Username label
   const label = document.createElement('div');
   label.className = "name-label";
   label.textContent = username;
   label.id = "label-local";
-  container.appendChild(label);
+  videosDiv.appendChild(label);
 
-  const muteIcon = document.createElement("div");
-  muteIcon.className = "mute-indicator";
-  muteIcon.id = "mute-local";
-  muteIcon.textContent = "Muted";
-  container.appendChild(muteIcon);
-
-  videosDiv.appendChild(container);
-
+  // Speaking detection
   setupSpeakingDetection(localVideo, localStream);
 }
 
@@ -120,23 +97,7 @@ function joinRoom(room) {
   socket.emit('join-room', { room, username });
 }
 
-// Existing users when we join
-socket.on('existing-users', (users) => {
-  users.forEach(({ id, username }) => {
-    const peer = createPeer(id, true);
-    peers[id] = { peer, username };
-  });
-});
-
 socket.on('user-joined', async ({ id, username }) => {
-  // If we already have a peer (because of signaling), just update username
-  if (peers[id]) {
-    peers[id].username = username;
-    const label = document.getElementById(`label-${id}`);
-    if (label) label.textContent = username;
-    return;
-  }
-
   const peer = createPeer(id, true);
   peers[id] = { peer, username };
 });
@@ -145,7 +106,7 @@ socket.on('signal', async ({ from, signal }) => {
   let entry = peers[from];
   if (!entry) {
     const peer = createPeer(from, false);
-    peers[from] = { peer, username: "Unknown" };
+    peers[from] = { peer, username: "User" };
     entry = peers[from];
   }
 
@@ -178,17 +139,10 @@ socket.on('user-left', (userId) => {
     delete peers[userId];
   }
 
-  const container = document.getElementById(`container-${userId}`);
-  if (container) container.remove();
-});
-
-// Remote mute indicator update
-socket.on("user-muted", ({ id, muted }) => {
-  const video = document.getElementById(`video-${id}`);
-  if (!video) return;
-
-  if (muted) video.classList.add("muted");
-  else video.classList.remove("muted");
+  const vid = document.getElementById(`video-${userId}`);
+  const label = document.getElementById(`label-${userId}`);
+  if (vid) vid.remove();
+  if (label) label.remove();
 });
 
 function createPeer(userId, isInitiator) {
@@ -196,6 +150,7 @@ function createPeer(userId, isInitiator) {
     iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
   });
 
+  // Add tracks (audio always, video only if camera is on)
   localStream.getTracks().forEach(track => {
     peer.addTrack(track, localStream);
   });
@@ -203,42 +158,27 @@ function createPeer(userId, isInitiator) {
   peer.ontrack = (event) => {
     const [stream] = event.streams;
 
-    let container = document.getElementById(`container-${userId}`);
-    if (!container) {
-      container = document.createElement("div");
-      container.className = "video-container";
-      container.id = `container-${userId}`;
-      videosDiv.appendChild(container);
-    }
-
     let video = document.getElementById(`video-${userId}`);
     if (!video) {
       video = document.createElement('video');
       video.id = `video-${userId}`;
       video.autoplay = true;
-      container.appendChild(video);
+      videosDiv.appendChild(video);
     }
 
     video.srcObject = stream;
 
+    // Username label
     let label = document.getElementById(`label-${userId}`);
     if (!label) {
       label = document.createElement('div');
       label.id = `label-${userId}`;
       label.className = "name-label";
-      label.textContent = peers[userId]?.username || userId;
-      container.appendChild(label);
+      label.textContent = peers[userId]?.username || "User";
+      videosDiv.appendChild(label);
     }
 
-    let muteIcon = document.getElementById(`mute-${userId}`);
-    if (!muteIcon) {
-      muteIcon = document.createElement("div");
-      muteIcon.className = "mute-indicator";
-      muteIcon.id = `mute-${userId}`;
-      muteIcon.textContent = "Muted";
-      container.appendChild(muteIcon);
-    }
-
+    // Speaking detection
     setupSpeakingDetection(video, stream);
   };
 
@@ -265,7 +205,7 @@ function createPeer(userId, isInitiator) {
   return peer;
 }
 
-// SPEAKING DETECTION
+// 🔊 SPEAKING DETECTION
 function setupSpeakingDetection(videoElement, stream) {
   const audioContext = new AudioContext();
   const analyser = audioContext.createAnalyser();
