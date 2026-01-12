@@ -18,12 +18,27 @@ app.use(express.static(path.join(__dirname, 'public')));
 io.on('connection', (socket) => {
   console.log("User connected:", socket.id);
 
-  // FIXED JOIN HANDLER
   socket.on('join-room', ({ room, username }) => {
     socket.join(room);
     socket.data.username = username;
 
     console.log(`${username} joined ${room}`);
+
+    // Send existing users to the new user
+    const usersInRoom = [];
+    const roomSet = io.sockets.adapter.rooms.get(room) || new Set();
+    for (const clientId of roomSet) {
+      if (clientId !== socket.id) {
+        const client = io.sockets.sockets.get(clientId);
+        if (client) {
+          usersInRoom.push({
+            id: clientId,
+            username: client.data.username || 'User'
+          });
+        }
+      }
+    }
+    socket.emit('existing-users', usersInRoom);
 
     // Tell others someone joined
     socket.to(room).emit('user-joined', {
@@ -40,12 +55,22 @@ io.on('connection', (socket) => {
     });
   });
 
-  // Handle disconnect
+  // Mute state relay
+  socket.on('mute-changed', ({ muted }) => {
+    socket.rooms.forEach((room) => {
+      if (room === socket.id) return;
+      socket.to(room).emit('user-muted', {
+        id: socket.id,
+        muted
+      });
+    });
+  });
+
   socket.on('disconnect', () => {
     console.log("User disconnected:", socket.id);
 
-    // Notify all rooms this user was in
     socket.rooms.forEach((room) => {
+      if (room === socket.id) return;
       socket.to(room).emit('user-left', socket.id);
     });
   });
