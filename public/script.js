@@ -26,16 +26,16 @@ joinBtn.onclick = async () => {
 
 muteBtn.onclick = () => {
   audioMuted = !audioMuted;
+
+  // Toggle local audio track
   localStream.getAudioTracks().forEach(t => t.enabled = !audioMuted);
   muteBtn.textContent = audioMuted ? 'Unmute' : 'Mute';
 
-  // Update local mute indicator
+  // Local mute indicator
   const localVideo = document.getElementById("local-video");
-  const localIcon = document.getElementById("mute-local");
-  if (audioMuted) {
-    localVideo.classList.add("muted");
-  } else {
-    localVideo.classList.remove("muted");
+  if (localVideo) {
+    if (audioMuted) localVideo.classList.add("muted");
+    else localVideo.classList.remove("muted");
   }
 
   // Tell others
@@ -67,7 +67,8 @@ cameraBtn.onclick = async () => {
     localStream.addTrack(newTrack);
 
     // Update local video element
-    document.getElementById("local-video").srcObject = localStream;
+    const localVideo = document.getElementById("local-video");
+    if (localVideo) localVideo.srcObject = localStream;
 
     cameraBtn.textContent = "Camera off";
   }
@@ -83,7 +84,6 @@ async function startMedia() {
   localStream.getVideoTracks().forEach(t => t.stop());
   cameraBtn.textContent = "Camera on";
 
-  // Create container
   const container = document.createElement("div");
   container.className = "video-container";
   container.id = "container-local";
@@ -95,14 +95,12 @@ async function startMedia() {
   localVideo.id = "local-video";
   container.appendChild(localVideo);
 
-  // Username label
   const label = document.createElement('div');
   label.className = "name-label";
   label.textContent = username;
   label.id = "label-local";
   container.appendChild(label);
 
-  // Mute indicator
   const muteIcon = document.createElement("div");
   muteIcon.className = "mute-indicator";
   muteIcon.id = "mute-local";
@@ -111,7 +109,6 @@ async function startMedia() {
 
   videosDiv.appendChild(container);
 
-  // Speaking detection
   setupSpeakingDetection(localVideo, localStream);
 }
 
@@ -123,7 +120,23 @@ function joinRoom(room) {
   socket.emit('join-room', { room, username });
 }
 
+// Existing users when we join
+socket.on('existing-users', (users) => {
+  users.forEach(({ id, username }) => {
+    const peer = createPeer(id, true);
+    peers[id] = { peer, username };
+  });
+});
+
 socket.on('user-joined', async ({ id, username }) => {
+  // If we already have a peer (because of signaling), just update username
+  if (peers[id]) {
+    peers[id].username = username;
+    const label = document.getElementById(`label-${id}`);
+    if (label) label.textContent = username;
+    return;
+  }
+
   const peer = createPeer(id, true);
   peers[id] = { peer, username };
 });
@@ -132,7 +145,7 @@ socket.on('signal', async ({ from, signal }) => {
   let entry = peers[from];
   if (!entry) {
     const peer = createPeer(from, false);
-    peers[from] = { peer, username: "User" };
+    peers[from] = { peer, username: "Unknown" };
     entry = peers[from];
   }
 
@@ -169,18 +182,13 @@ socket.on('user-left', (userId) => {
   if (container) container.remove();
 });
 
-// 🔊 Remote mute indicator update
+// Remote mute indicator update
 socket.on("user-muted", ({ id, muted }) => {
   const video = document.getElementById(`video-${id}`);
-  const icon = document.getElementById(`mute-${id}`);
+  if (!video) return;
 
-  if (!video || !icon) return;
-
-  if (muted) {
-    video.classList.add("muted");
-  } else {
-    video.classList.remove("muted");
-  }
+  if (muted) video.classList.add("muted");
+  else video.classList.remove("muted");
 });
 
 function createPeer(userId, isInitiator) {
@@ -188,7 +196,6 @@ function createPeer(userId, isInitiator) {
     iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
   });
 
-  // Add tracks (audio always, video only if camera is on)
   localStream.getTracks().forEach(track => {
     peer.addTrack(track, localStream);
   });
@@ -214,17 +221,15 @@ function createPeer(userId, isInitiator) {
 
     video.srcObject = stream;
 
-    // Username label
     let label = document.getElementById(`label-${userId}`);
     if (!label) {
       label = document.createElement('div');
       label.id = `label-${userId}`;
       label.className = "name-label";
-      label.textContent = peers[userId]?.username || "User";
+      label.textContent = peers[userId]?.username || userId;
       container.appendChild(label);
     }
 
-    // Mute indicator
     let muteIcon = document.getElementById(`mute-${userId}`);
     if (!muteIcon) {
       muteIcon = document.createElement("div");
@@ -234,7 +239,6 @@ function createPeer(userId, isInitiator) {
       container.appendChild(muteIcon);
     }
 
-    // Speaking detection
     setupSpeakingDetection(video, stream);
   };
 
@@ -261,7 +265,7 @@ function createPeer(userId, isInitiator) {
   return peer;
 }
 
-// 🔊 SPEAKING DETECTION
+// SPEAKING DETECTION
 function setupSpeakingDetection(videoElement, stream) {
   const audioContext = new AudioContext();
   const analyser = audioContext.createAnalyser();
